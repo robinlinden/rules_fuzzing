@@ -14,9 +14,7 @@
 
 #include "fuzzing/replay/test_replayer.h"
 
-#include <sys/stat.h>
-#include <sys/types.h>
-
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -46,14 +44,15 @@ TEST(TestReplayerTest, ReplaysFileSuccessfully) {
   std::vector<std::string> collected_tests;
   TestReplayer test_replayer(CollectTestsCallback(&collected_tests),
                              /*max_test_file_size=*/1024);
-  EXPECT_TRUE(test_replayer.ReplayTests(test_file).ok());
+  auto status = test_replayer.ReplayTests(test_file);
+  EXPECT_TRUE(status.ok()) << status.message();
   EXPECT_THAT(collected_tests, testing::UnorderedElementsAre("foo"));
 }
 
 TEST(TestReplayerTest, ReplaysEmptyDirectorySuccessfully) {
   const std::string test_dir =
       absl::StrCat(getenv("TEST_TMPDIR"), "/empty-dir");
-  ASSERT_EQ(mkdir(test_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(test_dir));
 
   std::vector<std::string> collected_tests;
   TestReplayer test_replayer(CollectTestsCallback(&collected_tests),
@@ -65,11 +64,11 @@ TEST(TestReplayerTest, ReplaysEmptyDirectorySuccessfully) {
 TEST(TestReplayerTest, ReplaysNonEmptyDirectorySuccessfully) {
   const std::string test_dir =
       absl::StrCat(getenv("TEST_TMPDIR"), "/non-empty-dir");
-  ASSERT_EQ(mkdir(test_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(test_dir));
   const std::string child_dir = absl::StrCat(test_dir, "/child");
-  ASSERT_EQ(mkdir(child_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(child_dir));
   const std::string leaf_dir = absl::StrCat(child_dir, "/leaf");
-  ASSERT_EQ(mkdir(leaf_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(leaf_dir));
   ASSERT_TRUE(SetFileContents(absl::StrCat(test_dir, "/a"), "foo").ok());
   ASSERT_TRUE(SetFileContents(absl::StrCat(child_dir, "/b"), "bar").ok());
   ASSERT_TRUE(SetFileContents(absl::StrCat(leaf_dir, "/c"), "baz").ok());

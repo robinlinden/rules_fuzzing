@@ -14,10 +14,6 @@
 
 #include "fuzzing/replay/test_replayer.h"
 
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-
 #include <memory>
 #include <string>
 
@@ -47,13 +43,15 @@ absl::Status TestReplayer::ReplayTestFile(absl::string_view path) {
 
 absl::Status TestReplayer::ReplayTests(absl::string_view path) {
   absl::Status replay_status;
-  const absl::Status yield_status =
-      YieldFiles(path, [this, &replay_status](absl::string_view file_path,
-                                              const struct stat& file_stat) {
-        if (S_ISREG(file_stat.st_mode)) {
+  const absl::Status yield_status = YieldFiles(
+      path,
+      [this, &replay_status](absl::string_view file_path,
+                             const std::filesystem::file_status& file_stat) {
+        if (file_stat.type() == std::filesystem::file_type::regular) {
           const absl::Status status = ReplayTestFile(std::string(file_path));
+          const auto file_size = std::filesystem::file_size(file_path);
           absl::FPrintF(stderr, "Replaying '%s' (%zd bytes): %s\n", file_path,
-                        file_stat.st_size, status.ToString());
+                        file_size, status.ToString());
           replay_status.Update(status);
         } else {
           absl::FPrintF(stderr, "Replaying '%s': SKIPPED (not a file)\n",

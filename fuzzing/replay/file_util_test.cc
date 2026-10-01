@@ -14,10 +14,8 @@
 
 #include "fuzzing/replay/file_util.h"
 
-#include <sys/stat.h>
-#include <sys/types.h>
-
 #include <cstdlib>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -32,9 +30,10 @@ namespace fuzzing {
 
 namespace {
 
-std::function<void(absl::string_view, const struct stat&)> CollectPathsCallback(
-    std::vector<std::string>* collected_paths) {
-  return [collected_paths](absl::string_view path, const struct stat&) {
+std::function<void(absl::string_view, const std::filesystem::file_status&)>
+CollectPathsCallback(std::vector<std::string>* collected_paths) {
+  return [collected_paths](absl::string_view path,
+                           const std::filesystem::file_status&) {
     absl::FPrintF(stderr, "Collected path: %s\n", path);
     collected_paths->push_back(std::string(path));
   };
@@ -43,7 +42,7 @@ std::function<void(absl::string_view, const struct stat&)> CollectPathsCallback(
 TEST(YieldFilesTest, ReturnsEmptyResultsOnEmptyDir) {
   const std::string root_dir =
       absl::StrCat(getenv("TEST_TMPDIR"), "/empty-root");
-  ASSERT_EQ(mkdir(root_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(root_dir));
 
   std::vector<std::string> collected_paths;
   const absl::Status status =
@@ -65,7 +64,7 @@ TEST(YieldFilesTest, ReturnsErrorOnMissingDir) {
 TEST(YieldFilesTest, YieldsTopLevelFiles) {
   const std::string root_dir =
       absl::StrCat(getenv("TEST_TMPDIR"), "/top-level-root");
-  ASSERT_EQ(mkdir(root_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(root_dir));
   ASSERT_TRUE(SetFileContents(absl::StrCat(root_dir, "/a"), "foo").ok());
   ASSERT_TRUE(SetFileContents(absl::StrCat(root_dir, "/b"), "bar").ok());
   ASSERT_TRUE(SetFileContents(absl::StrCat(root_dir, "/c"), "baz").ok());
@@ -80,11 +79,11 @@ TEST(YieldFilesTest, YieldsTopLevelFiles) {
 TEST(YieldFilesTest, YieldsDeepFiles) {
   const std::string root_dir =
       absl::StrCat(getenv("TEST_TMPDIR"), "/deep-root");
-  ASSERT_EQ(mkdir(root_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(root_dir));
   const std::string child_dir = absl::StrCat(root_dir, "/child");
-  ASSERT_EQ(mkdir(child_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(child_dir));
   const std::string leaf_dir = absl::StrCat(child_dir, "/leaf");
-  ASSERT_EQ(mkdir(leaf_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(leaf_dir));
   ASSERT_TRUE(SetFileContents(absl::StrCat(root_dir, "/a"), "foo").ok());
   ASSERT_TRUE(SetFileContents(absl::StrCat(child_dir, "/b"), "bar").ok());
   ASSERT_TRUE(SetFileContents(absl::StrCat(leaf_dir, "/c"), "baz").ok());
@@ -100,10 +99,10 @@ TEST(YieldFilesTest, YieldsDeepFiles) {
 TEST(YieldFilesTest, YieldsHiddenFilesAndDirs) {
   const std::string root_dir =
       absl::StrCat(getenv("TEST_TMPDIR"), "/dir-with-hidden");
-  ASSERT_EQ(mkdir(root_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(root_dir));
   ASSERT_TRUE(SetFileContents(absl::StrCat(root_dir, "/.a"), "foo").ok());
   const std::string child_dir = absl::StrCat(root_dir, "/.hidden");
-  ASSERT_EQ(mkdir(child_dir.c_str(), 0755), 0);
+  ASSERT_TRUE(std::filesystem::create_directory(child_dir));
   ASSERT_TRUE(SetFileContents(absl::StrCat(child_dir, "/b"), "bar").ok());
 
   std::vector<std::string> collected_paths;

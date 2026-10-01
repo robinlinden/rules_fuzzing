@@ -17,7 +17,7 @@
 #ifndef FUZZING_REPLAY_FILE_UTIL_H_
 #define FUZZING_REPLAY_FILE_UTIL_H_
 
-#include <sys/stat.h>
+#include <filesystem>
 
 #include "absl/functional/function_ref.h"
 #include "absl/status/status.h"
@@ -33,7 +33,9 @@ namespace fuzzing {
 // the function returns OK.
 absl::Status YieldFiles(
     absl::string_view path,
-    absl::FunctionRef<void(absl::string_view, const struct stat&)> callback);
+    absl::FunctionRef<void(absl::string_view,
+                           const std::filesystem::file_status&)>
+        callback);
 
 // Opens the given `path` for writing and sets the file contents to `contents`.
 absl::Status SetFileContents(absl::string_view path,

@@ -14,69 +14,61 @@
 
 #include "fuzzing/replay/file_util.h"
 
-#include <dirent.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
-
 #include <cerrno>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 #include "absl/functional/function_ref.h"
 #include "absl/status/status.h"
-#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "fuzzing/replay/status_util.h"
 
 namespace fuzzing {
 
-namespace {
-
-absl::Status TraverseDirectory(
-    absl::string_view path,
-    absl::FunctionRef<void(absl::string_view, const struct stat&)> callback) {
-  DIR* dir = opendir(std::string(path).c_str());
-  if (!dir) {
-    return ErrnoStatus(absl::StrCat("could not open directory ", path), errno);
-  }
-  absl::Status status = absl::OkStatus();
-  while (true) {
-    errno = 0;
-    struct dirent* entry = readdir(dir);
-    if (!entry) {
-      if (errno) {
-        status.Update(ErrnoStatus(
-            absl::StrCat("could not complete directory traversal for ", path),
-            errno));
-      }
-      break;
-    }
-    auto entry_name = absl::string_view(entry->d_name);
-    if (entry_name == "." || entry_name == "..") {
-      continue;
-    }
-    const std::string entry_path = absl::StrCat(path, "/", entry_name);
-    status.Update(YieldFiles(entry_path, callback));
-  }
-  closedir(dir);
-  return status;
-}
-
-}  // namespace
-
 absl::Status YieldFiles(
     absl::string_view path,
-    absl::FunctionRef<void(absl::string_view, const struct stat&)> callback) {
-  struct stat path_stat;
-  if (stat(std::string(path).c_str(), &path_stat) < 0) {
-    return ErrnoStatus(absl::StrCat("could not stat ", path), errno);
+    absl::FunctionRef<void(absl::string_view,
+                           const std::filesystem::file_status&)>
+        callback) {
+  std::error_code ec;
+
+  if (std::filesystem::is_regular_file(path, ec)) {
+    std::filesystem::file_status path_status =
+        std::filesystem::status(path, ec);
+    if (ec) {
+      return absl::UnknownError(
+          absl::StrCat("could not stat ", path, ": ", ec.message()));
+    }
+
+    callback(path, path_status);
+    return absl::OkStatus();
   }
-  if (S_ISDIR(path_stat.st_mode)) {
-    return TraverseDirectory(path, callback);
+
+  std::filesystem::recursive_directory_iterator it{path, ec};
+  if (ec) {
+    return absl::UnknownError(
+        absl::StrCat("could not stat ", path, ": ", ec.message()));
   }
-  callback(path, path_stat);
+
+  for (const auto& entry : it) {
+    if (entry.is_directory(ec)) {
+      continue;
+    }
+
+    const auto& entry_path = entry.path();
+
+    std::filesystem::file_status path_status =
+        std::filesystem::status(entry_path, ec);
+    if (ec) {
+      return absl::UnknownError(absl::StrCat(
+          "could not stat ", entry_path.string(), ": ", ec.message()));
+    }
+
+    callback(entry_path.string(), path_status);
+  }
+
   return absl::OkStatus();
 }
 
